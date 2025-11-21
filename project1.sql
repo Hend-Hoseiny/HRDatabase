@@ -304,14 +304,155 @@ AS
     END
 
 
--- 2.3 h
+-- 2.3 h) Remove attendance records for all employees during official 
+-- holidays.    
+-- i) Name: Remove_Holiday 
+-- ii) Type: Stored Procedure 
+-- iii) Input: Nothing 
+-- iv) Output : Nothing
 GO
 CREATE PROC Remove_Holiday
-    --remove attendance records for all employees during official holidays
-    AS 
+AS
+    BEGIN
+        DELETE A
+        FROM Attendance A
+        JOIN Holiday H ON A.a_date BETWEEN H.from_date AND H.to_date;
+    END
+GO
+
+
+-- 2.5 f) Verify whether the employee will be on leave during the specified 
+-- period without referencing the attendance table. If the employee has 
+-- a leave request with a pending status, treat it as approved for 
+-- verification purposes, without modifying its actual status. 
+-- i) Name: Is_On_Leave 
+-- ii) Type: Function 
+-- iii) Input: employee_ID int, from date, to date 
+-- iv) Output: Success bit 
+
+GO
+CREATE FUNCTION Is_On_Leave
+(
+    @employee_ID INT,
+    @from_date   DATE,
+    @to_date     DATE
+)
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @is_on_leave BIT = 0;
+
+    IF EXISTS (
+        SELECT 1
+        FROM [Leave] L
+        LEFT JOIN Annual_Leave A  ON A.request_ID = L.request_ID
+        LEFT JOIN Accidental_Leave Ac ON Ac.request_ID = L.request_ID
+        LEFT JOIN Medical_Leave M  ON M.request_ID = L.request_ID
+        LEFT JOIN Unpaid_Leave U  ON U.request_ID = L.request_ID
+        LEFT JOIN Compensation_Leave C ON C.request_ID = L.request_ID
+        WHERE (
+                A.emp_ID  = @employee_ID OR
+                Ac.emp_ID = @employee_ID OR
+                M.emp_ID  = @employee_ID OR
+                U.emp_ID  = @employee_ID OR
+                C.emp_ID  = @employee_ID
+            )
+            AND L.final_approval_status <> 'rejected'
+            AND NOT (L.end_date   < @from_date OR L.start_date > @to_date)
+    )
+    BEGIN
+        SET @is_on_leave = 1;
+    END
+
+    RETURN @is_on_leave;
+END
+GO
+
+-- 2.5 g)   Apply for an annual leave.  Populate the approval table 
+-- accordingly with the corresponding employees for the leaves’ 
+-- approval based on the hierarchy.  
+-- i) Name: Submit_annual 
+-- ii) Type: Stored Procedure 
+-- iii) Input: employee_ID int, replacement_emp int, start_date 
+-- date, end_date date 
+-- iv) Output: Nothing 
+GO
+CREATE PROC Submit_annual
+    @employee_ID INT,
+    @replacement_emp INT,
+    @start_date DATE,
+    @end_date DATE
+AS
+BEGIN
+    DECLARE @request_ID INT;
+    DECLARE @requester_rank INT;
+    DECLARE @requester_dept VARCHAR(50);
+
+    SELECT @requester_rank = MIN(r.rank)
+    FROM Employee_Role er
+    JOIN Role r ON r.role_name = er.role_name
+    WHERE er.emp_ID = @employee_ID;
+
+    SELECT @requester_dept = dept_name
+    FROM Employee
+    WHERE employee_ID = @employee_ID;
+
+    INSERT INTO Leave (date_of_request, l_start_date, end_date, final_approval_status)
+    VALUES (GETDATE(), @start_date, @end_date, 'pending');
+
+    INSERT INTO Annual_Leave (request_ID, emp_ID, replacement_emp)
+    VALUES (@request_ID, @employee_ID, @replacement_emp);
+
+    INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, emp_app_l_status)
+    SELECT e.employee_ID, @request_ID, 'pending'
+    FROM Employee e
+    JOIN Employee_Role er ON e.employee_ID = er.emp_ID
+    JOIN Role r ON r.role_name = er.role_name
+    WHERE e.dept_name = @requester_dept
+        AND e.employee_ID <> @employee_ID
+        AND r.rank < @requester_rank ; -- akhali bali mn null values!!!
+END
+GO
+
+-- h)  Retrieve the status of all my submitted annual and accidental 
+-- leaves during the current month.  
+-- i) Name: Status_leaves 
+-- ii) Type: Table Valued Function 
+-- iii) Input: employee_ID int 
+-- iv) Output: Table includes (request_ID, date_of_request, status) 
+
+
+-- i)   
+-- As a Dean/Vice-dean/President I can approve/reject annual 
+-- leaves. In case the person of replacement isn’t on leave and works 
+-- in the same department, the leave gets approved. 
+-- i) Name: Upperboard_approve_annual 
+-- ii) Type: Stored Procedure 
+-- iii) Input: request_ID int, Upperboard_ID int, replacement_ID 
+-- int 
+-- iv) Output: Nothing 
 
 
 
+-- j)  Apply for an accidental leave.  Populate the approval table 
+-- accordingly with the corresponding employees for the leaves’ 
+-- approval based on the hierarchy.  
+-- i) Name: Submit_accidental 
+-- ii) Type: Stored Procedure 
+-- iii) Input: employee_ID int, start_date date, end_date date 
+-- iv) Output: Nothing 
+
+
+
+-- k)   Apply for a medical leave. Populate the approval table 
+-- accordingly with the corresponding employees for the leaves’ 
+-- approval based on the hierarchy.  
+-- i) Name: Submit_medical 
+-- ii) Type: Stored Procedure 
+-- iii) Input: employee_ID int, start_date date, end_date date, type 
+-- varchar(50), insurance_status bit, disability_details varchar(50), 
+-- document_description varchar(50), file_name varchar(50) 
+-- iv) Output: Nothing
 
 
 
