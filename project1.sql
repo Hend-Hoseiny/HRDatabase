@@ -1,6 +1,6 @@
-CREATE DATABASE University_HR_ManagementSystem_Team_No_27;
+CREATE DATABASE University_HR_ManagementSystem_Team_No;
 
-USE University_HR_ManagementSystem_Team_No_27;
+USE University_HR_ManagementSystem_Team_No;
 GO
 CREATE PROC createAllTables 
 AS 
@@ -204,17 +204,125 @@ AS
     END
 GO
 
-DROP PROC createAllTables;
 
-EXEC createAllTables;
+-- 2.1 c
+GO
+CREATE PROC dropAllTables
+AS 
+    BEGIN
+    DROP TABLE IF EXISTS Employee_Approve_Leave;
+    DROP TABLE IF EXISTS Employee_Replace_Employee;
+    DROP TABLE IF EXISTS Performance;
+    DROP TABLE IF EXISTS Deduction;
+    DROP TABLE IF EXISTS Attendance;
+    DROP TABLE IF EXISTS Payroll;
+    DROP TABLE IF EXISTS Document;
+    DROP TABLE IF EXISTS Compensation_Leave;
+    DROP TABLE IF EXISTS Unpaid_Leave;
+    DROP TABLE IF EXISTS Medical_Leave;
+    DROP TABLE IF EXISTS Accidental_Leave;
+    DROP TABLE IF EXISTS Annual_Leave;
+    DROP TABLE IF EXISTS Leave;
+    DROP TABLE IF EXISTS Role_existsIn_Department;
+    DROP TABLE IF EXISTS Employee_Role;
+    DROP TABLE IF EXISTS Role;
+    DROP TABLE IF EXISTS Employee_Phone;
+    DROP TABLE IF EXISTS EMPLOYEE;
+    DROP TABLE IF EXISTS DEPARTMENT;
+    END
 
 GO
-CREATE VIEW allEmployeeProfiles 
+
+-- 2.1 d GO BAAACKKKKKKK WHEN WE ARE DONEEEE!!!!!!!!!!!!!!!
+CREATE PROC dropAllProceduresFunctionsViews
+AS 
+    BEGIN
+    DROP PROC IF EXISTS createAllTables;
+    DROP PROC IF EXISTS dropAllTables;
+    END
+
+GO 
+-- 2.2 C
+CREATE VIEW allPerformance  
+AS 
+SELECT * FROM PERFORMANCE 
+WHERE semester LIKE 'W%';
+
+
+-- 2.2 e
+GO
+CREATE VIEW allEmployeeAttendance
+AS 
+    SELECT E.employee_ID AS 'Employee ID', E.first_name AS 'Employee First Name', 
+           E.last_name AS 'Employee Last Name', A.a_date AS 'Attendance Date', 
+           A.check_in_time AS 'Check In Time', A.check_out_time AS 'Check Out Time', A.a_status AS 'Attendance Status'
+    FROM EMPLOYEE E
+    JOIN Attendance A ON E.employee_ID = A.emp_ID; 
+
+
+--2.3 c 
+
+GO
+
+CREATE PROC Create_Holiday
+    AS 
+    BEGIN 
+        CREATE TABLE Holiday(
+        holiday_id int IDENTITY,
+        naMe VARCHAR(50),
+        from_date DATE,
+        to_dateÂ DATE
+        );
+    END;
+    GO
+
+-- 2.3 e ??????????????????????????????????????????????????????????
+GO
+CREATE PROC Add_Holiday
+    @holiday_name VARCHAR(50),
+    @from_date DATE,
+    @to_date DATE
 AS
-SELECT employee_ID, first_name, 
-last_name, gender, email, addresse, years_of_experience, 
-official_day_off,type_of_contract,employment_status, 
-annual_balance, accidental_balance 
-FROM EMPLOYEE;
+    BEGIN
+        INSERT INTO Holiday (holiday_name, from_date, to_date)
+        VALUES (@holiday_name, @from_date, @to_date);
+    END
+
+
+-- 2.3 g
+GO
+CREATE PROC Update_Attendance
+    @employee_ID INT,
+    @check_in TIME,
+    @check_out TIME
+AS
+    BEGIN
+        INSERT INTO Attendance (a_date, check_in_time, check_out_time, a_status, emp_ID)
+        VALUES (CAST(GETDATE() AS DATE), @check_in, @check_out,
+                CASE WHEN @check_in IS NULL THEN 'Absent' ELSE 'Present' END,
+                @employee_ID);
+    END
+
+
+-- 2.3 h
+GO
+CREATE PROC Remove_Holiday
+    --remove attendance records for all employees during official holidays
+    AS 
+
+
+
+
+
+
+EXEC dropAllProceduresFunctionsViews;
+EXEC dropAllTables;
+EXEC createAllTables;
+
+DROP VIEW IF EXISTS allEmployeeAttendance;
+SELECT * FROM allEmployeeAttendance;
+
+
+
 
 
