@@ -214,7 +214,254 @@ AS
 SELECT employee_ID, first_name, 
 last_name, gender, email, addresse, years_of_experience, 
 official_day_off,type_of_contract,employment_status, 
-annual_balance, accidental_balance 
-FROM EMPLOYEE;
+annual_balance, accidental_balanceï¿½
+FROMï¿½EMPLOYEE;
 
 
+--2.4 a
+GO
+CREATE FUNCTION HRLoginValidation(@employee_id int, @password varchar(50))
+returns bit
+as
+begin
+declare @success bit
+if exists(
+select e.employee_id, e.password from Employee as e
+where e.employee_id=@employee_id and e.password=@password)
+set @success='0'
+else
+set @success='1'
+return @success
+end
+
+
+--2.4 b deepseek correct spacing
+
+go
+create proc HR_approval_an_acc
+    @request_id int,
+    @HR_id int
+as
+begin
+    declare @AnnOrAcc bit;
+    declare @Approved bit;
+    declare @balance int;
+    declare @days int;
+    declare @diff int;
+    declare @emp int;
+    declare @AccSa7 bit;
+    declare @reqDate date;
+    declare @startdate date;
+
+    if exists(select * from employee_approve_leave 
+    where emp1_id=@HR_id and leave_id=@request_id)
+    begin
+        if exists(select * from annual_leave where request_id=@request_id)
+            set @AnnOrAcc = 1
+        else
+            set @AnnOrAcc = 0
+
+        select @days = l.num_days, @reqDate = l.date_of_request, @startdate = l.start_date 
+        from [leave] l
+        where l.request_id = @request_id
+
+        if @AnnOrAcc = 1
+            select @balance = e1.annual_balance, @emp = e1.employee_id 
+            from [leave] l1 
+            inner join annual_leave an on l1.request_id = an.request_id 
+            inner join employee e1 on an.emp_id = e1.employee_id
+            where l1.request_id = @request_id
+        else
+            select @balance = e2.accidental_balance, @emp = e2.employee_id 
+            from [leave] l2 
+            inner join accidental_leave ac on l2.request_id = ac.request_id 
+            inner join employee e2 on ac.emp_id = e2.employee_id
+            where l2.request_id = @request_id
+
+        set @diff = @balance - @days
+        
+        -- get current date or use start date????
+        if @AnnOrAcc = 0 and (@days > 1 or DATEDIFF(HOUR, @reqDate, @startdate) > 48)
+            set @AccSa7 = 0
+        else
+            set @AccSa7 = 1
+
+        if @diff < 0 or @AccSa7 = 0
+            update employee_approve_leave
+            set status = 'rejected' 
+            where leave_id = @request_id and emp1_id = @HR_id
+        else
+            update employee_approve_leave
+            set status = 'approved' 
+            where leave_id = @request_id and emp1_id = @HR_id
+
+        if not exists(select * from employee_approve_leave eal1
+        where eal1.leave_id = @request_id and eal1.status = 'rejected')
+            set @Approved = 1
+        else 
+            set @Approved = 0
+
+        if @Approved = 1 and @AnnOrAcc = 1
+        begin
+            update employee set annual_balance = @diff where employee_id = @emp
+            update [leave] set final_approval_status = 'approved' where request_id = @request_id
+        end
+        else if @Approved = 1 and @AnnOrAcc = 0
+        begin
+            update employee set accidental_balance = @diff where employee_id = @emp
+            update [leave] set final_approval_status = 'approved' where request_id = @request_id
+        end
+        else
+        begin
+            update [leave] set final_approval_status = 'rejected' where request_id = @request_id
+        end
+    end
+end
+go
+
+--2.4 c
+go
+create proc HR_approval_unpaid
+@request_id int,
+@HR_id int
+as
+begin
+declare @emp int;
+declare @date date;
+declare @doc bit;
+declare @days int;
+declare @dayscheck bit;
+declare @oneperyear bit;
+declare @count int;
+
+if exists(select * from document d
+where d.unpaid_leave=@request_id)
+set @doc=1;
+else
+set @doc=0;
+
+select @days=l.num_days, @date=l.start_date from leave l
+where l.request_id=@request_id
+
+select @emp = ul.emp_id from unpaid_leave ul
+where ul.request_id=@request_id
+
+if @days<=30
+set @dayscheck = 1;
+else 
+set @dayscheck = 0;
+
+--bas what if akhad agaza that extends from one year to the next do i have to check end date too
+if exists (select * from unpaid_leave u inner join leave l1 on u.request_id=l1.request_id
+where u.emp_id=@emp and year(@date)=year(l1.start_date) and l1.request_id <> @request_id)
+set @oneperyear = 0;
+else
+set @oneperyear = 1;
+
+if @doc=1 and @dayscheck=1 and @oneperyear=1
+update employee_approve_leave
+            set status = 'approved' 
+            where leave_id = @request_id and emp1_id = @HR_id
+else
+update employee_approve_leave
+            set status = 'rejected' 
+            where leave_id = @request_id and emp1_id = @HR_id
+
+if not exists (select * from employee_approve_leave eal
+where eal.emp1_id=@HR_id and eal.leave_id=@request_id and eal.status= 'rejected')
+update leave
+set final_approval_status = 'approved' where request_id= @request_id;
+else
+update leave
+set final_approval_status = 'rejected' where request_id = @request_id;
+
+end
+go
+
+--2.4 d
+
+go
+create proc HR_approval_comp
+@request_id int,
+@HR_ID int
+as
+begin
+declare @check8 bit;
+declare @checkmonth bit;
+declare @checkrep bit;
+declare @emp int;
+declare @dateagaza date;
+declare @startdate date;
+declare @repdayoff varchar(50);
+declare @emprep int;
+
+select @emp=c.emp_id, @dateagaza=c.date_of_original_workday, @emprep=c.replacement_emp from compensation_leave c
+where c.request_id= @request_id
+
+select @startdate=l.start_date from leave l
+where l.request_id= @request_id
+
+select @repdayoff= e.official_day_off from employee e
+where e.employee_id = @remprep
+
+if exists(select * from attendance a
+where a.emp_id=@emp and a.date = @dateagaza and total_duration>= 8)
+set @check8 = 1;
+else
+set @check8=0;
+
+if month(@dateagaza)=month(@startdate)
+set @checkmonth=1;
+else
+set @checkmonth=0;
+
+if @repdayoff= datename(weekday,@startdate)
+set @checkrep = 1;
+else
+set @checkrep = 0;
+
+if @check8=1 and @checkmonth=1 and @checkrep=1
+update employee_approve_leave
+            set status = 'approved' 
+            where leave_id = @request_id and emp1_id = @HR_id;
+else
+update employee_approve_leave
+            set status = 'rejected' 
+            where leave_id = @request_id and emp1_id = @HR_id;
+
+if not exists (select * from employee_approve_leave eal
+where eal.emp1_id=@HR_id and eal.leave_id=@request_id and eal.status= 'rejected')
+update leave
+set final_approval_status = 'approved' where request_id= @request_id;
+else
+update leave
+set final_approval_status = 'rejected' where request_id = @request_id;
+
+end
+
+--2.4 e
+go
+create proc Deduction_hours
+@employee_ID int
+as
+begin
+declare @attid int,
+@date date,
+@sumhours int,
+@rate decimal(10,2);
+
+select top 1 @attid=a.attendance_id, @date=a.date from attendance a
+where a.emp_id=@employee_id and a.total_duration < 8 and MONTH(a.date) = MONTH(GETDATE()) and YEAR(a.date) = YEAR(GETDATE()) order by a.attendance_id
+
+IF @attid IS NULL
+        RETURN; --no missing hours?
+
+select @sumhours = sum(8 - a1.total_duration) from attendance a1
+where a1.emp_id=@employee_id and a1.total_duration < 8 and MONTH(a1.date) = MONTH(GETDATE()) and YEAR(a1.date) = YEAR(GETDATE());
+
+EXEC rate_per_hour @employee_ID, @rate OUTPUT;
+
+insert into deduction(emp_id, date, amount, type, status, unpaid_id, attendance_id)
+values (@employee_id, @date, (@sumhours*@rate), 'missing_hours', 'pending', null, @attid );
+
+end;
