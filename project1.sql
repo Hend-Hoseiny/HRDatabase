@@ -450,7 +450,7 @@ declare @attid int,
 @sumhours int,
 @rate decimal(10,2);
 
-select top 1 @attid=a.attendance_id, @date=a.date from attendance a
+select top 1 @attid=a.attendance_id from attendance a
 where a.emp_id=@employee_id and a.total_duration < 8 and MONTH(a.date) = MONTH(GETDATE()) and YEAR(a.date) = YEAR(GETDATE()) order by a.attendance_id
 
 IF @attid IS NULL
@@ -460,6 +460,8 @@ select @sumhours = sum(8 - a1.total_duration) from attendance a1
 where a1.emp_id=@employee_id and a1.total_duration < 8 and MONTH(a1.date) = MONTH(GETDATE()) and YEAR(a1.date) = YEAR(GETDATE());
 
 EXEC rate_per_hour @employee_ID, @rate OUTPUT;
+
+set @date= GETDATE();
 
 insert into deduction(emp_id, date, amount, type, status, unpaid_id, attendance_id)
 values (@employee_id, @date, (@sumhours*@rate), 'missing_hours', 'pending', null, @attid );
