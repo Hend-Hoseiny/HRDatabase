@@ -402,7 +402,7 @@ select @startdate=l.start_date from leave l
 where l.request_id= @request_id
 
 select @repdayoff= e.official_day_off from employee e
-where e.employee_id = @remprep
+where e.employee_id = @emprep
 
 if exists(select * from attendance a
 where a.emp_id=@emp and a.date = @dateagaza and total_duration>= 8)
