@@ -467,3 +467,16 @@ insert into deduction(emp_id, date, amount, type, status, unpaid_id, attendance_
 values (@employee_id, @date, (@sumhours*@rate), 'missing_hours', 'pending', null, @attid );
 
 end;
+
+--2.5 h
+
+go
+create function Status_leaves(@employee_ID int)
+returns table
+as
+return(select l.request_id, l.date_of_request, l.final_approval_status as "status" from leave l
+where month(l.start_date) = month(getdate()) and l.request_id in ((select ac.request_id from accidental_leave ac
+where ac.emp_id= @employee_id) union (select an.request_id from annual_leave an
+where an.emp_id=@employee_id)))
+
+go
