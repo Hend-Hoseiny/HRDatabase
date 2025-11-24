@@ -318,29 +318,32 @@ GO
 
 CREATE PROC clearAllTables
 AS
-    BEGIN
-        TRUNCATE TABLE Role_existsIn_Department;
-        TRUNCATE TABLE Employee_Approve_Leave;
-        TRUNCATE TABLE Employee_Replace_Employee;
-        TRUNCATE TABLE Employee_Phone;
-        TRUNCATE TABLE Payroll;
-        TRUNCATE TABLE Performance;
-        TRUNCATE TABLE Deduction;
-        TRUNCATE TABLE Document;
-        TRUNCATE TABLE Compensation_Leave;
-        TRUNCATE TABLE Unpaid_Leave;
-        TRUNCATE TABLE Medical_Leave;
-        TRUNCATE TABLE Accidental_Leave;
-        TRUNCATE TABLE Annual_Leave;
-        TRUNCATE TABLE Leave;
-        TRUNCATE TABLE Employee_Role;
-        TRUNCATE TABLE Attendance;
-        TRUNCATE TABLE EMPLOYEE;
-        TRUNCATE TABLE DEPARTMENT;
-        TRUNCATE TABLE Role;
-    END
+BEGIN
+    DELETE FROM Role_existsIn_Department;
+    DELETE FROM Employee_Approve_Leave;
+    DELETE FROM Employee_Replace_Employee;
+    DELETE FROM Employee_Phone;
+    DELETE FROM Payroll;
+    DELETE FROM Performance;
+    DELETE FROM Deduction;
+    DELETE FROM Document;
+    DELETE FROM Compensation_Leave;
+    DELETE FROM Unpaid_Leave;
+    DELETE FROM Medical_Leave;
+    DELETE FROM Accidental_Leave;
+    DELETE FROM Annual_Leave;
+    DELETE FROM Leave;
+    DELETE FROM Employee_Role;
+    DELETE FROM Attendance;
+    DELETE FROM Employee;
+    DELETE FROM Department;
+    DELETE FROM Role;
+
+END
 
 GO
+
+
 ---------------------------------------------------------------------------------------------------------
 --2.2(a)
 GO
