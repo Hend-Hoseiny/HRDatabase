@@ -955,16 +955,20 @@ AS
 
     EXEC rate_per_hour @employee_ID, @rate OUTPUT;
 
-    SELECT @total_hours= (SUM(A.total_duration)*COUNT(*)/3600)- COUNT(*)*8
+    SELECT @total_hours= (SUM(A.total_duration)*COUNT(*)/60)- COUNT(*)*8
     FROM Attendance A
     WHERE A.emp_ID = @employee_ID;
     SELECT @overtime_fac= MAX(R.percentage_overtime)
     FROM Employee_Role ER INNER JOIN ROLE R ON ER.role_name = R.role_name
     WHERE ER.emp_ID = @employee_ID ;
 
-    SET @bonus_amount= @rate * @overtime_fac * @total_hours/100;------2.5.a
+    SET @bonus_amount= @rate * @overtime_fac * @total_hours/100;
+    
+
 
 GO
+
+--2.5.a
 CREATE FUNCTION EmployeeLoginValidation
     (@employee_ID int,
     @password varchar(50))
@@ -984,35 +988,8 @@ CREATE FUNCTION EmployeeLoginValidation
     END
 GO
 
------------------------------------------------------------------------------------
---2.4 i
-GO
 
----------------------------------------------------------------------------------------------------------
---2.5.a
-GO
-CREATE FUNCTION EmployeeLoginValidation
-    (@employee_ID int,
-    @password varchar(50))
-    RETURNS BIT
-    AS
-    BEGIN
-        DECLARE @success BIT;
-        DECLARE @curr_password VARCHAR(50);
-        SET @curr_password = (SELECT password
-                                FROM EMPLOYEE 
-                                WHERE employee_ID = @employee_ID);
-        IF @curr_password = @password
-            SET @success = 1
-        ELSE
-            SET @success = 0
-        RETURN @success
-    END
-GO
-
-
----------------------------------------------------------------------------------------------------------
-------2.5.b
+--2.5.b
 GO
 CREATE FUNCTION  MyPerformance
     (@employee_ID int,
@@ -1028,8 +1005,8 @@ CREATE FUNCTION  MyPerformance
 GO
 
 ---------------------------------------------------------------------------------------------------------
-------2.5.c
-GO
+--2.5.c
+
 CREATE FUNCTION MyAttendance
     (@employee_ID int)
     RETURNS TABLE
@@ -1043,7 +1020,7 @@ CREATE FUNCTION MyAttendance
         EXCEPT
                (SELECT A.*
                 FROM Attendance A , EMPLOYEE E
-                WHERE A.emp_ID = E.employee_ID AND E.official_day_off = DATENAME(WEEKDAY,A.date)
+                WHERE A.emp_ID = E.employee_ID AND E.official_day_off = DATENAME(WEEKDAY,A.date) AND A.status='absent'
                 )
     )
 GO
