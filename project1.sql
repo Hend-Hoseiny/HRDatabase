@@ -968,6 +968,29 @@ AS
 
 GO
 
+CREATE PROC Add_Payroll 
+@employee_ID int, @from date, @to date
+AS
+DECLARE @overtime_bonus decimal(10,2);
+DECLARE @deducted_amount decimal(10,2);
+EXEC Bonus_amount @employee_ID ,@overtime_bonus OUTPUT
+SELECT @deducted_amount = SUM(D.amount)
+FROM Deduction D
+WHERE D.emp_ID = @employee_ID AND D.date BETWEEN @from AND @to;
+DECLARE @final_salary_amount decimal (10,1);
+DECLARE @salary_amount decimal (10,2);
+
+SELECT @salary_amount=E.salary 
+FROM Employee E
+WHERE E.employee_ID = @employee_ID;
+
+SET @final_salary_amount = @salary_amount + @overtime_bonus - @deducted_amount;
+INSERT INTO PAYROLL
+VALUES (CONVERT(DATE,CURRENT_TIMESTAMP), @final_salary_amount, @from, @to,'',@overtime_bonus,@deducted_amount, @employee_ID);
+UPDATE Deduction 
+SET status='finalized'
+WHERE emp_ID = @employee_ID AND date BETWEEN @from AND @to;
+---------------------------------------------------------------------------------------------------------
 --2.5.a
 CREATE FUNCTION EmployeeLoginValidation
     (@employee_ID int,
@@ -1334,7 +1357,7 @@ INSERT INTO Document(type, description, file_name, creation_date, expiry_date, s
 DECLARE @document_ID INT = SCOPE_IDENTITY();
 
 INSERT INTO Employee_Approve_Leave(EMP1_ID, Leave_ID, status)
-SELECT e.employee_ID, @reqID, 'pending' --is it pending?
+SELECT e.employee_ID, @reqID, 'pending' 
 FROM Employee E
 INNER JOIN Employee_Role ER ON ER.emp_ID=E.employee_ID
 where ER.role_name='Medical Doctor';
@@ -1413,6 +1436,7 @@ BEGIN
           AND Leave_ID = @request_ID
           AND status = 'pending';
     END
+    -- if not, ya3ni memo count=0, reject
     ELSE
     BEGIN
         UPDATE Employee_Approve_Leave
