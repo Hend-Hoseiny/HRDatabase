@@ -81,7 +81,7 @@ AS
         date_of_request DATE,
         start_date DATE,
         end_date DATE,
-        num_days AS DATEDIFF(DAY,start_date,end_date),
+        num_days AS DATEDIFF(DAY,start_date,end_date)+1,
         final_approval_status VARCHAR(50) default 'pending',
         CHECK (final_approval_status IN ('rejected', 'approved', 'pending')),
         CONSTRAINT leave_pk PRIMARY KEY (request_ID)
@@ -200,11 +200,12 @@ AS
         CONSTRAINT per_fk1 FOREIGN KEY (emp_ID) REFERENCES Employee(employee_ID)
     );
     CREATE TABLE Employee_Replace_Employee(
+        Table_ID int,
         Emp1_ID INT,
         Emp2_ID INT,
         from_date DATE,
         to_date DATE,
-        CONSTRAINT emp_rep_emp_pk PRIMARY KEY(Emp1_ID,Emp2_ID),
+        CONSTRAINT emp_rep_emp_pk PRIMARY KEY(Table_ID, Emp1_ID,Emp2_ID),
         CONSTRAINT pemp_rep_emp_fk1 FOREIGN KEY (Emp1_ID) REFERENCES Employee(employee_ID),
         CONSTRAINT pemp_rep_emp_fk2 FOREIGN KEY (Emp2_ID) REFERENCES Employee(employee_ID)
     );
@@ -436,12 +437,12 @@ GO
 ---------------------------------------------------------------------------------------------------------
 --2.3(c)
 GO
-
 CREATE PROC Update_Employment_Status
 @employee_ID int
 AS
     DECLARE @isOnLeave BIT;
-    SET @isOnLeave = dbo.Is_On_Leave(@employee_ID, EOMONTH(GETDATE(),-1)+1,EOMONTH(GETDATE()));
+declare @today DATE = CONVERT (DATE, CURRENT_TIMESTAMP);
+    SET @isOnLeave = dbo.Is_On_Leave(@employee_ID, @today, @today);
     IF @isOnLeave=1
         UPDATE EMPLOYEE
         SET employment_status = 'onleave'
@@ -452,6 +453,7 @@ AS
         WHERE employee_ID = @employee_ID;
 
 GO
+
 
 ---------------------------------------------------------------------------------------------------------
 --2.3(d)
@@ -722,9 +724,7 @@ where ul.request_id=@request_id;
 select @balance = e.annual_balance from employee e
 where e.employee_id = @emp;
 
---if @balance > 0
---    set @balancecheck = 0; -- must the annual balance be 0? or optional? TA still didnt reply !!!
---else 
+
     set @balancecheck = 1; 
 
 if @days>30
@@ -960,7 +960,9 @@ WHERE U.emp_ID = @employee_ID AND (MONTH(@start)= MONTH(CURRENT_TIMESTAMP) OR MO
 EXEC rate_per_hour @employee_ID, @rate OUTPUT;
 IF MONTH(@start) = MONTH(@end)
 BEGIN
-    SET @duration1 = DATEDIFF(day, @start, @end);
+    SELECT @duration1 = L.num_days
+    FROM Leave L
+    WHERE L.request_ID = @unID;
 
     SET @amount1 = @rate * @duration1;
     INSERT INTO Deduction
@@ -998,9 +1000,9 @@ AS
 
     EXEC rate_per_hour @employee_ID, @rate OUTPUT;
 
-    SELECT @total_hours= (SUM(A.total_duration)*COUNT(*)/60)- COUNT(*)*8
+    SELECT @total_hours= (SUM(A.total_duration)/60)- COUNT(*)*8
     FROM Attendance A
-    WHERE A.emp_ID = @employee_ID;
+    WHERE A.emp_ID = @employee_ID AND A.date BETWEEN EOMONTH(GETDATE(),-1)+1 AND EOMONTH(GETDATE());
     SELECT @overtime_fac= MAX(R.percentage_overtime)
     FROM Employee_Role ER INNER JOIN ROLE R ON ER.role_name = R.role_name
     WHERE ER.emp_ID = @employee_ID ;
