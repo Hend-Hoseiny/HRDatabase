@@ -788,7 +788,7 @@ select @repdayoff= e.official_day_off from employee e
 where e.employee_id = @emprep;
 
 if exists(select * from attendance a
-where a.emp_id=@emp and a.date = @dateagaza and total_duration>= 8)
+where a.emp_id=@emp and a.date = @dateagaza and a.total_duration>= 8*60)
 set @check8 = 1;
 else
 set @check8=0;
