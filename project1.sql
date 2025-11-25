@@ -6,7 +6,6 @@ GO
     USE University_HR_ManagementSystem_Team_No_130;
 
 GO
-
 ---------------------------------------------------------------------------------------------------------
 --2.1(b)
 GO
@@ -36,7 +35,7 @@ AS
         emergency_contact_phone CHAR(11),
         annual_balance INT,
         accidental_balance INT,
-        salary DECIMAL(10,2),
+        salary DECIMAL(10,2) DEFAULT 0 ,
         hire_date DATE,
         last_working_date DATE,
         dept_name VARCHAR(50),
@@ -871,12 +870,54 @@ GO
 
 -----------------------------------------------------------------------------------------------------------
 --2.4(f)
+
+--helper
+GO
+CREATE FUNCTION CalculateSalary
+(
+    @employee_ID INT
+)
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    DECLARE 
+        @YOE INT,
+        @base_salary DECIMAL(10,2),
+        @percentage_YOE DECIMAL(4,2),
+        @salary DECIMAL(10,2);
+
+    SELECT @YOE = years_of_experience
+    FROM Employee
+    WHERE employee_ID = @employee_ID;
+
+    SELECT TOP 1
+        @base_salary = R.base_salary,
+        @percentage_YOE = R.percentage_YOE
+    FROM Employee_Role ER
+    JOIN Role R ON ER.role_name = R.role_name
+    WHERE ER.emp_ID = @employee_ID
+    ORDER BY R.rank;  
+
+    IF @base_salary IS NULL
+        RETURN 0;
+
+    -- Salary formula
+    SET @salary = @base_salary 
+                  + (@percentage_YOE / 100.0) * @YOE * @base_salary;
+
+    RETURN @salary;
+END;
+GO
+-----------------------------------------------------------------------
+--helper
+GO
 CREATE PROC rate_per_hour
     @employee_ID int, @rate decimal (10,2) OUTPUT
     AS
-    SELECT @rate =MAX(salary) / (22*8)
-    FROM EMPLOYEE E
-    WHERE E.employee_ID = @employee_ID;
+    DECLARE @salary DECIMAL(10,2) = dbo.CalculateSalary(@employee_ID);
+    SET @rate = @salary/(22*8)
+GO
+-----------------------------------------------------------------------
 GO
 
  CREATE PROC Deduction_days
@@ -970,6 +1011,8 @@ AS
 
 GO
 --2.4 i
+GO
+
 CREATE PROC Add_Payroll 
 @employee_ID int, @from date, @to date
 AS
@@ -982,9 +1025,7 @@ WHERE D.emp_ID = @employee_ID AND D.date BETWEEN @from AND @to;
 DECLARE @final_salary_amount decimal (10,1);
 DECLARE @salary_amount decimal (10,2);
 
-SELECT @salary_amount=E.salary 
-FROM Employee E
-WHERE E.employee_ID = @employee_ID;
+SET @salary_amount = dbo.CalculateSalary(@employee_ID);
 
 SET @final_salary_amount = @salary_amount + @overtime_bonus - @deducted_amount;
 INSERT INTO PAYROLL
@@ -992,8 +1033,12 @@ VALUES (CONVERT(DATE,CURRENT_TIMESTAMP), @final_salary_amount, @from, @to,'',@ov
 UPDATE Deduction 
 SET status='finalized'
 WHERE emp_ID = @employee_ID AND date BETWEEN @from AND @to;
+
+GO
 ---------------------------------------------------------------------------------------------------------
 --2.5.a
+GO
+
 CREATE FUNCTION EmployeeLoginValidation
     (@employee_ID int,
     @password varchar(50))
