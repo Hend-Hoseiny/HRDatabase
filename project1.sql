@@ -224,6 +224,7 @@ AS
 GO
 
 ---------------------------------------------------------------------------------------------------------
+drop PROC createAllTables;
 EXEC createAllTables;
 ---------------------------------------------------------------------------------------------------------
 --2.1(c)
@@ -251,13 +252,14 @@ AS
         DROP TABLE IF EXISTS EMPLOYEE;
         DROP TABLE IF EXISTS DEPARTMENT;
         DROP TABLE IF EXISTS Role;
+        DROP TABLE IF EXISTS Holiday;
     END
 
 GO
 ---------------------------------------------------------------------------------------------------------
--- DROP PROC dropAllTables;
+DROP PROC dropAllTables;
 -- GO
--- EXEC dropAllTables;
+EXEC dropAllTables;
 ---------------------------------------------------------------------------------------------------------
 --2.1(d)
 GO
@@ -313,37 +315,41 @@ END
 
 GO
 ---------------------------------------------------------------------------------------------------------
+drop PROC dropAllProceduresFunctionsViews;
+---------------------------------------------------------------------------------------------------------
 --2.1(e)
 GO
 
 CREATE PROC clearAllTables
 AS
 BEGIN
-    DELETE FROM Role_existsIn_Department;
-    DELETE FROM Employee_Approve_Leave;
-    DELETE FROM Employee_Replace_Employee;
-    DELETE FROM Employee_Phone;
-    DELETE FROM Payroll;
-    DELETE FROM Performance;
-    DELETE FROM Deduction;
-    DELETE FROM Document;
-    DELETE FROM Compensation_Leave;
-    DELETE FROM Unpaid_Leave;
-    DELETE FROM Medical_Leave;
-    DELETE FROM Accidental_Leave;
-    DELETE FROM Annual_Leave;
-    DELETE FROM Leave;
-    DELETE FROM Employee_Role;
-    DELETE FROM Attendance;
-    DELETE FROM Employee;
-    DELETE FROM Department;
-    DELETE FROM Role;
+    TRUNCATE TABLE Role_existsIn_Department;
+    TRUNCATE TABLE Employee_Approve_Leave;
+    TRUNCATE TABLE Employee_Replace_Employee;
+    TRUNCATE TABLE Employee_Phone;
+    TRUNCATE TABLE Payroll;
+    TRUNCATE TABLE Performance;
+    TRUNCATE TABLE Deduction;
+    TRUNCATE TABLE Document;
+    TRUNCATE TABLE Compensation_Leave;
+    TRUNCATE TABLE Unpaid_Leave;
+    TRUNCATE TABLE Medical_Leave;
+    TRUNCATE TABLE Accidental_Leave;
+    TRUNCATE TABLE Annual_Leave;
+    TRUNCATE TABLE Leave;
+    TRUNCATE TABLE Employee_Role;
+    TRUNCATE TABLE Attendance;
+    TRUNCATE TABLE Employee;
+    TRUNCATE TABLE Department;
+    TRUNCATE TABLE Role;
+    TRUNCATE TABLE Holiday;
 
 END
 
 GO
 
-
+---------------------------------------------------------------------------------------------------------
+DROP PROC clearAllTables;
 ---------------------------------------------------------------------------------------------------------
 --2.2(a)
 GO
@@ -524,6 +530,22 @@ AS
     DELETE A
     FROM Attendance A
     INNER JOIN HOLIDAY H ON A.date >= H.from_date AND A.date <= H.to_date;
+GO
+---------------------------------------------------------------------------------------------------------
+--2.3(i)
+GO
+
+CREATE PROC Remove_DayOff
+    @Employee_id INT
+AS
+   DELETE A
+   FROM Attendance A
+   INNER JOIN EMPLOYEE E ON A.emp_ID = E.employee_ID
+   WHERE E.employee_ID = @Employee_id 
+        AND  DATENAME(WEEKDAY,A.date) = E.official_day_off 
+        AND MONTH(A. date) = MONTH(CURRENT_TIMESTAMP)
+        AND A.status = 'absent'
+
 GO
 ---------------------------------------------------------------------------------------------------------
 --2.3(j)
