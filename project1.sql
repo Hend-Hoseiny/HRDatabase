@@ -191,7 +191,7 @@ AS
         CONSTRAINT ded_fk3 FOREIGN KEY(attendance_ID) REFERENCES Attendance (attendance_ID)
     );
     CREATE TABLE Performance(
-        performance_ID INT,
+        performance_ID INT IDENTITY(1,1),
         rating INT,
         comments VARCHAR(50),
         semester CHAR(3),
@@ -294,6 +294,7 @@ BEGIN
     DROP PROC IF EXISTS Update_Attendance;
     DROP PROC IF EXISTS Remove_Holiday;
     DROP PROC IF EXISTS Remove_Approved_Leaves;
+    DROP PROC IF EXISTS Remove_DayOff ;
     DROP PROC IF EXISTS Replace_Employee;
     DROP PROC IF EXISTS HR_approval_an_acc;
     DROP PROC IF EXISTS HR_approval_unpaid;
@@ -303,6 +304,7 @@ BEGIN
     DROP PROC IF EXISTS Deduction_days;
     DROP PROC IF EXISTS Deduction_unpaid;
     DROP PROC IF EXISTS Bonus_amount;
+    DROP PROC IF EXISTS Add_Payroll;
     DROP PROC IF EXISTS Submit_annual;
     DROP PROC IF EXISTS Upperboard_approve_annual;
     DROP PROC IF EXISTS Submit_accidental;
@@ -556,7 +558,7 @@ CREATE PROC Remove_Approved_Leaves
      BEGIN
     Delete A from attendance A
     INNER JOIN Leave L 
-    ON A.date BETWEEN L.start_date AND L.end_date
+    ON A.date BETWEEN L.start_date AND L.end_date 
     WHERE L.final_approval_status='approved'
     and L.request_ID IN(
         SELECT request_ID FROM Annual_Leave WHERE emp_ID=@Employee_id
@@ -967,7 +969,7 @@ AS
 
 
 GO
-
+--2.4 i
 CREATE PROC Add_Payroll 
 @employee_ID int, @from date, @to date
 AS
@@ -1116,6 +1118,7 @@ BEGIN
             AND L.final_approval_status <> 'rejected'
             AND NOT (L.end_date < @from OR L.start_date > @to)
     )
+    
     BEGIN
         SET @is_on_leave = 1;
     END
@@ -1124,6 +1127,7 @@ BEGIN
 END
 GO
 -----------------------------------------------------------------------------------------
+
 --2.5 g
 -- 2.5 g   Apply for an annual leave.  Populate the approval table 
 -- accordingly with the corresponding employees for the leaves’ 
@@ -1133,6 +1137,7 @@ GO
 -- iii) Input: employee_ID int, replacement_emp int, start_date 
 -- date, end_date date 
 -- iv) Output: Nothing
+
 GO
 CREATE PROC Submit_annual
     @employee_ID INT,
@@ -1142,13 +1147,11 @@ CREATE PROC Submit_annual
 AS
 BEGIN
 
-    --verify input date
+    --verify input dates
     IF @start_date > @end_date
-    BEGIN
         RETURN;
-    END
 
-    -- make sure employee exists, is full time, and not already on leave
+    -- employee exists, is full-time, and not already on leave
     IF NOT EXISTS (
         SELECT *
         FROM Employee
@@ -1156,30 +1159,26 @@ BEGIN
           AND type_of_contract = 'full_time'
     )
     OR dbo.Is_On_Leave(@employee_ID, @start_date, @end_date) = 1
-    BEGIN
         RETURN;
-    END
 
     --make sure replacement is different, in same department and not on leave
-   IF @replacement_emp IS NOT NULL
+    IF @replacement_emp IS NOT NULL
     BEGIN
-    IF NOT EXISTS (
-        SELECT *
-        FROM Employee eReq
-        JOIN Employee eRep ON eRep.employee_ID = @replacement_emp
-        WHERE eReq.employee_ID = @employee_ID
-          AND eRep.employee_ID = @replacement_emp
-          AND eReq.dept_name = eRep.dept_name
-          AND dbo.Is_On_Leave(@replacement_emp, @start_date, @end_date) = 0
-          AND eRep.employee_ID <> @employee_ID
-          AND eRep.employment_status = 'active'
-    )
-    BEGIN
-        RETURN;
+        IF NOT EXISTS (
+            SELECT *
+            FROM Employee eReq
+            JOIN Employee eRep ON eRep.employee_ID = @replacement_emp
+            WHERE eReq.employee_ID = @employee_ID
+              AND eRep.employee_ID = @replacement_emp
+              AND eReq.dept_name = eRep.dept_name
+              AND dbo.Is_On_Leave(@replacement_emp, @start_date, @end_date) = 0
+              AND eRep.employee_ID <> @employee_ID
+              AND eRep.employment_status = 'active'
+        )
+            RETURN;
     END
-END
 
-    --get rank and department of requester
+    -- get rank and department of requester
     DECLARE @requester_rank INT, @requester_dept VARCHAR(50);
 
     SELECT @requester_rank = MIN(r.rank)
@@ -1192,29 +1191,128 @@ END
     WHERE employee_ID = @employee_ID;
 
     --insert into leaves kolohom
-    DECLARE @request_ID INT;
+    INSERT INTO Leave (date_of_request, start_date, end_date, final_approval_status)
+    VALUES (GETDATE(), @start_date, @end_date, 'pending');
 
-    INSERT INTO Leave (request_ID, date_of_request, start_date, end_date, final_approval_status)
-    VALUES (@request_ID, GETDATE(), @start_date, @end_date, 'pending');
+    DECLARE @request_ID INT = SCOPE_IDENTITY();
 
-    SET @request_ID = SCOPE_IDENTITY();
-
-    INSERT INTO Annual_Leave 
+    INSERT INTO Annual_Leave (request_ID, emp_ID, replacement_emp)
     VALUES (@request_ID, @employee_ID, @replacement_emp);
 
-    --add fel aproval table
-    INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
-    (SELECT DISTINCT e.employee_ID, @request_ID, 'pending'
-    FROM Employee e
-    JOIN Employee_Role er ON e.employee_ID = er.emp_ID
-    JOIN Role r ON r.role_name = er.role_name
-    WHERE e.dept_name = @requester_dept
-      AND e.employee_ID <> @employee_ID
-      AND r.rank > @requester_rank)
+    -- When the Dean or Vice Dean submits an annual/unpaid leave request, it must be 
+    -- approved/rejected by the President and HR representative.     
+    DECLARE @isDean BIT = 0,
+            @isViceDean BIT = 0,
+            @isHR BIT = 0;
 
+    IF EXISTS (
+        SELECT * FROM Employee_Role ER JOIN Role R ON ER.role_name = R.role_name
+        WHERE ER.emp_ID = @employee_ID AND R.role_name = 'Dean'
+    ) SET @isDean = 1;
+
+    IF EXISTS (
+        SELECT * FROM Employee_Role ER JOIN Role R ON ER.role_name = R.role_name
+        WHERE ER.emp_ID = @employee_ID AND R.role_name = 'Vice Dean'
+    ) SET @isViceDean = 1;
+
+    IF EXISTS (
+        SELECT * FROM Employee_Role ER JOIN Role R ON ER.role_name = R.role_name
+        WHERE ER.emp_ID = @employee_ID AND R.role_name LIKE 'HR_Representative%'
+    ) SET @isHR = 1;
+
+
+    -- CASE 1: Request submitted by DEAN or VICE DEAN
+    -- APPROVAL REQUIRED FROM PRESIDENT + HR REP
+    IF @isDean = 1 OR @isViceDean = 1
+        BEGIN
+            -- president only so i can select mn both employment statuses 
+            INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
+            SELECT TOP 1 e.employee_ID, @request_ID, 'pending'
+            FROM Employee e
+            JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+            JOIN Role R ON R.role_name = ER.role_name
+            WHERE R.title = 'President'
+            AND e.employment_status IN ('active', 'notice_period');
+
+            -- hr rep 
+            INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
+            SELECT TOP 1 e.employee_ID, @request_ID, 'pending'
+            FROM Employee e
+            JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+            JOIN Role R ON R.role_name = ER.role_name
+            WHERE R.title = 'HR_Representative_' + @requester_dept
+            AND e.employment_status IN ('active', 'notice_period');
+
+            RETURN;
+        END
+
+    -- CASE 2: Request submitted by HR EMPLOYEE
+    -- APPROVAL REQUIRED FROM HR of a higher rank according to ms1
+
+    IF @isHR = 1
+    BEGIN
+        INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
+        SELECT TOP 1 e.employee_ID, @request_ID, 'pending'
+        FROM Employee e
+        INNER JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+        INNER JOIN Role R ON R.role_name = ER.role_name
+        WHERE R.role_name LIKE 'HR%'
+          AND R.rank > @requester_rank -- higher HR rank only
+          AND e.employment_status in ('active', 'notice_period');
+
+        RETURN;
+    END
+
+    -- CASE 3: Normal employee (everyone else)
+    -- APPROVAL REQUIRED FROM: Dean (or Vice Dean if Dean is on leave) and HR Representative
+
+    -- Check if dean is on leave
+    DECLARE @dean_on_leave BIT = 0;
+    IF EXISTS (
+        SELECT e.employee_ID
+        FROM Employee e
+        INNER JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+        INNER JOIN Role R ON R.role_name = ER.role_name
+        WHERE R.role_name = 'Dean'
+          AND e.dept_name = @requester_dept
+          AND dbo.Is_On_Leave(e.employee_ID, @start_date, @end_date) = 1
+    )
+        SET @dean_on_leave = 1;
+
+    --populate the table according to dean availability
+    IF @dean_on_leave = 0
+    BEGIN
+        INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
+        SELECT TOP 1 e.employee_ID, @request_ID, 'pending'
+        FROM Employee e
+        INNER JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+        INNER JOIN Role R ON R.role_name = ER.role_name
+        WHERE R.role_name = 'Dean'
+          AND e.dept_name = @requester_dept
+          AND e.employment_status in ('active', 'notice_period');
+    END
+    ELSE
+    BEGIN
+        INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
+        SELECT TOP 1 e.employee_ID, @request_ID, 'pending'
+        FROM Employee e
+        INNER JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+        INNER JOIN Role R ON R.role_name = ER.role_name
+        WHERE R.role_name = 'Vice Dean'
+          AND e.dept_name = @requester_dept
+          AND e.employment_status in ('active', 'notice_period');
+    END
+
+    --Add HR Representative 
+    INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
+    SELECT TOP 1 e.employee_ID, @request_ID, 'pending'
+    FROM Employee e
+    INNER JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+    INNER JOIN Role R ON R.role_name = ER.role_name
+    WHERE R.role_name = 'HR_Representative_' + @requester_dept
+      AND e.employment_status in ('active', 'notice_period');
 END
 GO
-
 -------------------------------------------------------------------------------------------
 --2.5 h
 
@@ -1241,93 +1339,99 @@ CREATE PROC Upperboard_approve_annual
     @replacement_ID INT
 AS
 BEGIN
-    DECLARE @emp_ID INT;
-    DECLARE @emp_dept VARCHAR(50);
-    DECLARE @rep_dept VARCHAR(50);
-    DECLARE @is_rep_on_leave BIT;
-
-    SELECT @emp_ID = an.emp_ID
-    FROM Annual_Leave an
-    WHERE an.request_ID = @request_ID;
-
-    SELECT @emp_dept = e.dept_name
-    FROM Employee e
-    WHERE e.employee_ID = @emp_ID;
-
-    SELECT @rep_dept = e2.dept_name
-    FROM Employee e2
-    WHERE e2.employee_ID = @replacement_ID;
-
-    SET @is_rep_on_leave = dbo.Is_On_Leave(@replacement_ID,
-                                          (SELECT l.start_date
-                                           FROM Leave l
-                                           WHERE l.request_ID = @request_ID),
-                                          (SELECT l.end_date
-                                           FROM Leave l
-                                           WHERE l.request_ID = @request_ID));
-
-    IF @emp_dept = @rep_dept AND @is_rep_on_leave = 0
-    BEGIN
-        UPDATE Employee_Approve_Leave
-        SET status = 'approved'
-        WHERE Emp1_ID = @Upperboard_ID AND Leave_ID = @request_ID;
-
-        UPDATE Leave
-        SET final_approval_status = 'approved'
-        WHERE request_ID = @request_ID;
-    END
-    ELSE
-    BEGIN
-        UPDATE Employee_Approve_Leave
-        SET status = 'rejected'
-        WHERE Emp1_ID = @Upperboard_ID AND Leave_ID = @request_ID;
-
-        UPDATE Leave
-        SET final_approval_status = 'rejected'
-        WHERE request_ID = @request_ID;
-    END
+   --check if upperboard id is valid
+   IF NOT EXISTS (
+         SELECT *
+         FROM Employee_Role ER
+         JOIN Role R ON ER.role_name = R.role_name
+         WHERE ER.emp_ID = @Upperboard_ID
+            AND R.role_name IN ('President', 'Vice President')
+    )
+         RETURN;
+    
+    --check if replacement is not on leave
+    IF dbo.Is_On_Leave(@replacement_ID, 
+        (SELECT L.start_date FROM Leave L WHERE L.request_ID = @request_ID),
+        (SELECT L.end_date FROM Leave L WHERE L.request_ID = @request_ID)
+    ) = 1
+        RETURN;
+    
+    --already checked if same department in employee_approve_leave insertion
+    UPDATE Employee_Approve_Leave
+    SET status = 'approved'
+    WHERE Emp1_ID = @Upperboard_ID
+      AND Leave_ID = @request_ID
+        AND status = 'pending';
 END
 GO
 
+--DROP PROC Upperboard_approve_annual;
 -----------------------------------------------------------------------------------------------------------
---2.5 j
+-- j)  Apply for an accidental leave.  Populate the approval table 
+-- accordingly with the corresponding employees for the leaves’ 
+-- approval based on the hierarchy.  
+-- i) Name: Submit_accidental 
+-- ii) Type: Stored Procedure 
+-- iii) Input: employee_ID int, start_date date, end_date date 
+-- iv) Output: Nothing 
 
 GO
+
+--2.5 j
 CREATE PROC Submit_accidental
     @employee_ID INT,
-    @start_date DATE,
-    @end_date DATE
+    @start_date DATE
 AS
 BEGIN
-    DECLARE @request_ID INT;
-    DECLARE @requester_rank INT;
-    DECLARE @requester_dept VARCHAR(50);
+    -- verify input date
+    IF @start_date IS NULL
+        RETURN;
 
-    SELECT @requester_rank = MIN(r.rank)
-    FROM Employee_Role er JOIN Role r
-    ON r.role_name = er.role_name
-    WHERE er.emp_ID = @employee_ID;
+    -- employee exists and has at least 1 accidental leave
+    IF NOT EXISTS (
+        SELECT *
+        FROM Employee
+        WHERE employee_ID = @employee_ID
+          AND accidental_balance >= 1
+    )
+        RETURN;
 
-    SELECT @requester_dept = dept_name
-    FROM Employee
-    WHERE employee_ID = @employee_ID;
+    IF dbo.Is_On_Leave(@employee_ID, @start_date, @start_date) = 1
+    RETURN;
 
+    -- request submitted within 48 hours according to ms1
+    IF DATEDIFF(HOUR, @start_date, GETDATE()) > 48
+        RETURN;
+
+    -- insert into leaves kolaha
     INSERT INTO Leave (date_of_request, start_date, end_date, final_approval_status)
-    VALUES (GETDATE(), @start_date, @end_date, 'pending');
-    set @request_ID = SCOPE_IDENTITY();
+    VALUES (GETDATE(), @start_date, @start_date, 'pending');
+
+    DECLARE @request_ID INT = SCOPE_IDENTITY();
 
     INSERT INTO Accidental_Leave (request_ID, emp_ID)
     VALUES (@request_ID, @employee_ID);
 
+    -- populate Employee_Approve_Leave table
+    -- approval always by HR representative. if requester is HR employee, HR manager approves
+    DECLARE @requester_is_hr BIT = 0;
+    IF EXISTS (
+        SELECT 1
+        FROM Employee_Role ER
+        JOIN Role R ON ER.role_name = R.role_name
+        WHERE ER.emp_ID = @employee_ID
+          AND R.role_name = 'HR_Representative%'
+    )
+        SET @requester_is_hr = 1;
+
     INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
-    (SELECT DISTINCT e.employee_ID, @request_ID, 'pending'
-    FROM Employee e JOIN Employee_Role er
-    ON e.employee_ID = er.emp_ID
+    SELECT e.employee_ID, @request_ID, 'pending'
+    FROM Employee e
+    JOIN Employee_Role ER ON e.employee_ID = ER.emp_ID
+    JOIN Role R ON R.role_name = ER.role_name
+    WHERE (@requester_is_hr = 1 AND R.role_name = 'HR Manager')
+       OR (@requester_is_hr = 0 AND R.role_name = 'HR_Representative_' + e.dept_name);
 
-    JOIN Role r
-    ON r.role_name = er.role_name
-
-    WHERE r.role_name LIKE 'HR_Representative%')
 END
 GO
 
