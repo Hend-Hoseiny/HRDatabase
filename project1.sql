@@ -629,63 +629,64 @@ begin
 
     begin
         if exists(select * from annual_leave where request_id=@request_id)
-            set @AnnOrAcc = 1
+            set @AnnOrAcc = 1;
+            --annual=1
         else
-            set @AnnOrAcc = 0
+            set @AnnOrAcc = 0;
 
         select @days = l.num_days, @reqDate = l.date_of_request, @startdate = l.start_date 
         from [leave] l
-        where l.request_id = @request_id
+        where l.request_id = @request_id;
 
         if @AnnOrAcc = 1
             select @balance = e1.annual_balance, @emp = e1.employee_id 
             from [leave] l1 
             inner join annual_leave an on l1.request_id = an.request_id 
             inner join employee e1 on an.emp_id = e1.employee_id
-            where l1.request_id = @request_id
+            where l1.request_id = @request_id;
         else
             select @balance = e2.accidental_balance, @emp = e2.employee_id 
             from [leave] l2 
             inner join accidental_leave ac on l2.request_id = ac.request_id 
             inner join employee e2 on ac.emp_id = e2.employee_id
-            where l2.request_id = @request_id
+            where l2.request_id = @request_id;
 
-        set @diff = @balance - @days
+        set @diff = @balance - @days;
         
         -- get current date or use start date????
         if @AnnOrAcc = 0 and (@days > 1 or DATEDIFF(HOUR, @reqDate, @startdate) > 48)
-            set @AccSa7 = 0
+            set @AccSa7 = 0;
         else
-            set @AccSa7 = 1
+            set @AccSa7 = 1;
 
         if @diff < 0 or @AccSa7 = 0
             update employee_approve_leave
             set status = 'rejected' 
-            where leave_id = @request_id and emp1_id = @HR_id
+            where leave_id = @request_id and emp1_id = @HR_id;
         else
             update employee_approve_leave
             set status = 'approved' 
-            where leave_id = @request_id and emp1_id = @HR_id
+            where leave_id = @request_id and emp1_id = @HR_id;
 
         if not exists(select * from employee_approve_leave eal1
         where eal1.leave_id = @request_id and eal1.status = 'rejected')
-            set @Approved = 1
+            set @Approved = 1;
         else 
-            set @Approved = 0
+            set @Approved = 0;
 
         if @Approved = 1 and @AnnOrAcc = 1
         begin
-            update employee set annual_balance = @diff where employee_id = @emp
-            update [leave] set final_approval_status = 'approved' where request_id = @request_id
+            update employee set annual_balance = @diff where employee_id = @emp;
+            update [leave] set final_approval_status = 'approved' where request_id = @request_id;
         end
         else if @Approved = 1 and @AnnOrAcc = 0
         begin
-            update employee set accidental_balance = @diff where employee_id = @emp
-            update [leave] set final_approval_status = 'approved' where request_id = @request_id
+            update employee set accidental_balance = @diff where employee_id = @emp;
+            update [leave] set final_approval_status = 'approved' where request_id = @request_id;
         end
         else
         begin
-            update [leave] set final_approval_status = 'rejected' where request_id = @request_id
+            update [leave] set final_approval_status = 'rejected' where request_id = @request_id;
         end
     end
 end
@@ -712,13 +713,13 @@ declare @balance int;
 declare @balancecheck bit;
 
 select @days=l.num_days, @date=l.start_date from leave l
-where l.request_id=@request_id
+where l.request_id=@request_id;
 
 select @emp = ul.emp_id from unpaid_leave ul
-where ul.request_id=@request_id
+where ul.request_id=@request_id;
 
 select @balance = e.annual_balance from employee e
-where e.employee_id = @emp
+where e.employee_id = @emp;
 
 --if @balance > 0
 --    set @balancecheck = 0; -- must the annual balance be 0? or optional? TA still didnt reply !!!
@@ -739,11 +740,11 @@ set @oneperyear = 1;
 if @balancecheck=1 and @dayscheck=1 and @oneperyear=1
 update employee_approve_leave
             set status = 'approved' 
-            where leave_id = @request_id and emp1_id = @HR_id
+            where leave_id = @request_id and emp1_id = @HR_id;
 else
 update employee_approve_leave
             set status = 'rejected' 
-            where leave_id = @request_id and emp1_id = @HR_id
+            where leave_id = @request_id and emp1_id = @HR_id;
 
 if not exists (select * from employee_approve_leave eal
 where eal.leave_id=@request_id and eal.status= 'rejected')
@@ -763,28 +764,28 @@ go
 
 go
 
-create proc HR_approval_comp
+CREATE PROC HR_approval_comp
 @request_id int,
 @HR_ID int
-as
-begin
-declare @check8 bit;
-declare @checkmonth bit;
-declare @checkrep bit;
-declare @emp int;
-declare @dateagaza date;
-declare @startdate date;
-declare @repdayoff varchar(50);
-declare @emprep int;
+AS
+BEGIN
+    declare @check8 bit;
+    declare @checkmonth bit;
+    declare @checkrep bit;
+    declare @emp int;
+    declare @dateagaza date;
+    declare @startdate date;
+    declare @repdayoff varchar(50);
+    declare @emprep int;
 
 select @emp=c.emp_id, @dateagaza=c.date_of_original_workday, @emprep=c.replacement_emp from compensation_leave c
-where c.request_id= @request_id
+where c.request_id= @request_id;
 
 select @startdate=l.start_date from leave l
-where l.request_id= @request_id
+where l.request_id= @request_id;
 
 select @repdayoff= e.official_day_off from employee e
-where e.employee_id = @emprep
+where e.employee_id = @emprep;
 
 if exists(select * from attendance a
 where a.emp_id=@emp and a.date = @dateagaza and total_duration>= 8)
@@ -1092,6 +1093,9 @@ CREATE FUNCTION Is_On_Leave
 RETURNS BIT
 AS
 BEGIN
+    IF @from > @to
+        RETURN 0;
+
     DECLARE @is_on_leave BIT=0;
 
     IF EXISTS (
@@ -1121,7 +1125,14 @@ END
 GO
 -----------------------------------------------------------------------------------------
 --2.5 g
-GO
+-- 2.5 g   Apply for an annual leave.  Populate the approval table 
+-- accordingly with the corresponding employees for the leaves’ 
+-- approval based on the hierarchy.  
+-- i) Name: Submit_annual 
+-- ii) Type: Stored Procedure 
+-- iii) Input: employee_ID int, replacement_emp int, start_date 
+-- date, end_date date 
+-- iv) Output: Nothing
 GO
 CREATE PROC Submit_annual
     @employee_ID INT,
@@ -1130,34 +1141,77 @@ CREATE PROC Submit_annual
     @end_date DATE
 AS
 BEGIN
-    DECLARE @request_ID INT;
-    DECLARE @requester_rank INT;
-    DECLARE @requester_dept VARCHAR(50);
+
+    --verify input date
+    IF @start_date > @end_date
+    BEGIN
+        RETURN;
+    END
+
+    -- make sure employee exists, is full time, and not already on leave
+    IF NOT EXISTS (
+        SELECT *
+        FROM Employee
+        WHERE employee_ID = @employee_ID
+          AND type_of_contract = 'full_time'
+    )
+    OR dbo.Is_On_Leave(@employee_ID, @start_date, @end_date) = 1
+    BEGIN
+        RETURN;
+    END
+
+    --make sure replacement is different, in same department and not on leave
+   IF @replacement_emp IS NOT NULL
+    BEGIN
+    IF NOT EXISTS (
+        SELECT *
+        FROM Employee eReq
+        JOIN Employee eRep ON eRep.employee_ID = @replacement_emp
+        WHERE eReq.employee_ID = @employee_ID
+          AND eRep.employee_ID = @replacement_emp
+          AND eReq.dept_name = eRep.dept_name
+          AND dbo.Is_On_Leave(@replacement_emp, @start_date, @end_date) = 0
+          AND eRep.employee_ID <> @employee_ID
+          AND eRep.employment_status = 'active'
+    )
+    BEGIN
+        RETURN;
+    END
+END
+
+    --get rank and department of requester
+    DECLARE @requester_rank INT, @requester_dept VARCHAR(50);
 
     SELECT @requester_rank = MIN(r.rank)
-    FROM Employee_Role er JOIN Role r
-    ON r.role_name = er.role_name
+    FROM Employee_Role er
+    JOIN Role r ON r.role_name = er.role_name
     WHERE er.emp_ID = @employee_ID;
 
     SELECT @requester_dept = dept_name
     FROM Employee
     WHERE employee_ID = @employee_ID;
 
-    INSERT INTO Leave (date_of_request, start_date, end_date, final_approval_status)
-    VALUES (GETDATE(), @start_date, @end_date, 'pending');
+    --insert into leaves kolohom
+    DECLARE @request_ID INT;
+
+    INSERT INTO Leave (request_ID, date_of_request, start_date, end_date, final_approval_status)
+    VALUES (@request_ID, GETDATE(), @start_date, @end_date, 'pending');
+
     SET @request_ID = SCOPE_IDENTITY();
-    INSERT INTO Annual_Leave (request_ID, emp_ID, replacement_emp)
+
+    INSERT INTO Annual_Leave 
     VALUES (@request_ID, @employee_ID, @replacement_emp);
 
+    --add fel aproval table
     INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
-    (SELECT e.employee_ID, @request_ID, 'pending'
-    FROM Employee e JOIN Employee_Role er
-    ON e.employee_ID = er.emp_ID
+    (SELECT DISTINCT e.employee_ID, @request_ID, 'pending'
+    FROM Employee e
+    JOIN Employee_Role er ON e.employee_ID = er.emp_ID
     JOIN Role r ON r.role_name = er.role_name
     WHERE e.dept_name = @requester_dept
-        AND e.employee_ID <> @employee_ID
-      AND r.rank IS NOT NULL
-        AND r.rank < @requester_rank );
+      AND e.employee_ID <> @employee_ID
+      AND r.rank > @requester_rank)
+
 END
 GO
 
