@@ -589,7 +589,8 @@ end
 --2.4 b
 -- Approve/reject annual/accidental leaves based on the employee’s balance.
 go
-CREATE PROC HR_approval_an_acc
+
+create proc HR_approval_an_acc
     @request_id int,
     @HR_id int
 as
@@ -604,33 +605,31 @@ begin
     declare @reqDate date;
     declare @startdate date;
 
-    if exists(select * from employee_approve_leave
-    where emp1_id=@HR_id and leave_id=@request_id)
     begin
         if exists(select * from annual_leave where request_id=@request_id)
             set @AnnOrAcc = 1
         else
             set @AnnOrAcc = 0
 
-        select @days = l.num_days, @reqDate = l.date_of_request, @startdate = l.start_date
+        select @days = l.num_days, @reqDate = l.date_of_request, @startdate = l.start_date 
         from [leave] l
         where l.request_id = @request_id
 
         if @AnnOrAcc = 1
-            select @balance = e1.annual_balance, @emp = e1.employee_id
-            from [leave] l1
-            inner join annual_leave an on l1.request_id = an.request_id
+            select @balance = e1.annual_balance, @emp = e1.employee_id 
+            from [leave] l1 
+            inner join annual_leave an on l1.request_id = an.request_id 
             inner join employee e1 on an.emp_id = e1.employee_id
             where l1.request_id = @request_id
         else
-            select @balance = e2.accidental_balance, @emp = e2.employee_id
-            from [leave] l2
-            inner join accidental_leave ac on l2.request_id = ac.request_id
+            select @balance = e2.accidental_balance, @emp = e2.employee_id 
+            from [leave] l2 
+            inner join accidental_leave ac on l2.request_id = ac.request_id 
             inner join employee e2 on ac.emp_id = e2.employee_id
             where l2.request_id = @request_id
 
         set @diff = @balance - @days
-
+        
         -- get current date or use start date????
         if @AnnOrAcc = 0 and (@days > 1 or DATEDIFF(HOUR, @reqDate, @startdate) > 48)
             set @AccSa7 = 0
@@ -639,17 +638,17 @@ begin
 
         if @diff < 0 or @AccSa7 = 0
             update employee_approve_leave
-            set status = 'rejected'
+            set status = 'rejected' 
             where leave_id = @request_id and emp1_id = @HR_id
         else
             update employee_approve_leave
-            set status = 'approved'
+            set status = 'approved' 
             where leave_id = @request_id and emp1_id = @HR_id
 
         if not exists(select * from employee_approve_leave eal1
         where eal1.leave_id = @request_id and eal1.status = 'rejected')
             set @Approved = 1
-        else
+        else 
             set @Approved = 0
 
         if @Approved = 1 and @AnnOrAcc = 1
@@ -668,12 +667,14 @@ begin
         end
     end
 end
+
 go
 
 -----------------------------------------------------------------------------------------------------------
 --2.4 c
 --Approve/reject unpaid leaves.
 go
+
 create proc HR_approval_unpaid
 @request_id int,
 @HR_id int
@@ -681,17 +682,12 @@ as
 begin
 declare @emp int;
 declare @date date;
-declare @doc bit;
 declare @days int;
 declare @dayscheck bit;
 declare @oneperyear bit;
 declare @count int;
-
-if exists(select * from document d
-where d.unpaid_ID =@request_id)
-set @doc=1;
-else
-set @doc=0;
+declare @balance int;
+declare @balancecheck bit;
 
 select @days=l.num_days, @date=l.start_date from leave l
 where l.request_id=@request_id
@@ -699,35 +695,43 @@ where l.request_id=@request_id
 select @emp = ul.emp_id from unpaid_leave ul
 where ul.request_id=@request_id
 
-if @days<=30
-set @dayscheck = 1;
-else
-set @dayscheck = 0;
+select @balance = e.annual_balance from employee e
+where e.employee_id = @emp
 
---bas what if akhad agaza that extends from one year to the next do i have to check end date too
-if exists (select U.* from unpaid_leave u inner join leave l1 on u.request_id=l1.request_id
-where u.emp_id=@emp and year(@date)=year(l1.start_date) and l1.request_id <> @request_id)
+--if @balance > 0
+--    set @balancecheck = 0; -- must the annual balance be 0? or optional? TA still didnt reply !!!
+--else 
+    set @balancecheck = 1; 
+
+if @days>30
+set @dayscheck = 0;
+else 
+set @dayscheck = 1;
+
+if exists (select * from unpaid_leave u inner join leave l1 on u.request_id=l1.request_id
+where u.emp_id=@emp and year(@date)=year(l1.start_date) and l1.request_id <> @request_id and l1.final_approval_status='approved')
 set @oneperyear = 0;
 else
 set @oneperyear = 1;
 
-if @doc=1 and @dayscheck=1 and @oneperyear=1
+if @balancecheck=1 and @dayscheck=1 and @oneperyear=1
 update employee_approve_leave
-            set status = 'approved'
+            set status = 'approved' 
             where leave_id = @request_id and emp1_id = @HR_id
 else
 update employee_approve_leave
-            set status = 'rejected'
+            set status = 'rejected' 
             where leave_id = @request_id and emp1_id = @HR_id
 
 if not exists (select * from employee_approve_leave eal
-where eal.emp1_id=@HR_id and eal.leave_id=@request_id and eal.status= 'rejected')
+where eal.leave_id=@request_id and eal.status= 'rejected')
 update leave
 set final_approval_status = 'approved' where request_id= @request_id;
 else
+begin
 update leave
 set final_approval_status = 'rejected' where request_id = @request_id;
-
+end
 end
 go
 
@@ -736,6 +740,7 @@ go
 -- Approve/reject compensation leaves.
 
 go
+
 create proc HR_approval_comp
 @request_id int,
 @HR_ID int
@@ -777,15 +782,15 @@ set @checkrep = 0;
 
 if @check8=1 and @checkmonth=1 and @checkrep=1
 update employee_approve_leave
-            set status = 'approved'
+            set status = 'approved' 
             where leave_id = @request_id and emp1_id = @HR_id;
 else
 update employee_approve_leave
-            set status = 'rejected'
+            set status = 'rejected' 
             where leave_id = @request_id and emp1_id = @HR_id;
 
 if not exists (select * from employee_approve_leave eal
-where eal.emp1_id=@HR_id and eal.leave_id=@request_id and eal.status= 'rejected')
+where eal.leave_id=@request_id and eal.status= 'rejected')
 update leave
 set final_approval_status = 'approved' where request_id= @request_id;
 else
@@ -794,37 +799,49 @@ set final_approval_status = 'rejected' where request_id = @request_id;
 
 end
 
+go
+
 -----------------------------------------------------------------------------------------------------------
 --2.4 e
 --Add deduction due to missing hours. While adding the deduction, reference the attendance_id of the first record of the month that has less than 8 hours.
-go
-create proc Deduction_hours
+GO
+CREATE PROC Deduction_hours
 @employee_ID int
-as
-begin
-declare @attid int,
-@date date,
-@sumhours int,
-@rate decimal(10,2);
+AS
+BEGIN
+    DECLARE @attid int,
+            @date date,
+            @summins int,
+            @rate decimal(10,2);
 
-select top 1 @attid=a.attendance_id from attendance a
-where a.emp_id=@employee_id and a.total_duration < 8 and MONTH(a.date) = MONTH(GETDATE()) and YEAR(a.date) = YEAR(GETDATE()) order by a.attendance_id
+    SET @date = GETDATE();
 
-IF @attid IS NULL
-        RETURN; --no missing hours?
+    SELECT TOP 1 @attid = a.attendance_id
+    FROM attendance a
+    WHERE a.emp_id = @employee_ID
+      AND a.total_duration IS NOT NULL  
+      AND a.total_duration < 480
+      AND MONTH(a.date) = MONTH(@date)
+      AND YEAR(a.date) = YEAR(@date)
+    ORDER BY a.attendance_id;
 
-select @sumhours = sum(8 - a1.total_duration) from attendance a1
-where a1.emp_id=@employee_id and a1.total_duration < 8 and MONTH(a1.date) = MONTH(GETDATE()) and YEAR(a1.date) = YEAR(GETDATE());
+    IF @attid IS NULL
+        RETURN;
 
-EXEC rate_per_hour @employee_ID, @rate OUTPUT;
+    SELECT @summins = SUM(480 - a1.total_duration)
+    FROM attendance a1
+    WHERE a1.emp_id = @employee_ID
+      AND a1.total_duration IS NOT NULL
+      AND a1.total_duration < 480
+      AND MONTH(a1.date) = MONTH(@date)
+      AND YEAR(a1.date) = YEAR(@date);
 
-set @date= GETDATE();
+    EXEC rate_per_hour @employee_ID, @rate OUTPUT;
 
-insert into deduction(emp_id, date, amount, type, status, unpaid_id, attendance_id)
-values (@employee_id, @date, (@sumhours*@rate), 'missing_hours', 'pending', null, @attid );
+    INSERT INTO deduction(emp_id, date, amount, type, status, unpaid_id, attendance_id) 
+    VALUES (@employee_ID, @date, (@summins * @rate / 60), 'missing_hours', 'pending', NULL, @attid);
 
-end;
-
+END;
 GO
 
 -----------------------------------------------------------------------------------------------------------
@@ -1394,4 +1411,5 @@ VALUES(@rating, @comment, @semester, @employee_ID);
 END
 
 GO
+
 
