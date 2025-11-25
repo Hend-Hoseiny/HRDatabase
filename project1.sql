@@ -1273,7 +1273,7 @@ BEGIN
     JOIN Role r
     ON r.role_name = er.role_name
 
-     WHERE r.role_name LIKE 'HR_Representative%';
+    WHERE r.role_name LIKE 'HR_Representative%')
 END
 GO
 
