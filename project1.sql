@@ -1238,6 +1238,7 @@ BEGIN
 
     INSERT INTO Leave (date_of_request, start_date, end_date, final_approval_status)
     VALUES (GETDATE(), @start_date, @end_date, 'pending');
+    set @request_ID = SCOPE_IDENTITY();
 
     INSERT INTO Accidental_Leave (request_ID, emp_ID)
     VALUES (@request_ID, @employee_ID);
@@ -1250,9 +1251,7 @@ BEGIN
     JOIN Role r
     ON r.role_name = er.role_name
 
-    WHERE e.dept_name = @requester_dept
-        AND e.employee_ID <> @employee_ID
-        AND r.rank < @requester_rank) ;
+     WHERE r.role_name LIKE 'HR_Representative%';
 END
 GO
 
